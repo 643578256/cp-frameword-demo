@@ -1,0 +1,116 @@
+package com.im.auth.utils;
+
+
+import org.apache.commons.codec.DecoderException;
+import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.lang.StringEscapeUtils;
+import java.security.GeneralSecurityException;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
+
+
+/**
+ * 密码工具类
+ */
+public class SecurityUtils {
+
+    //捣乱的盐值长度
+    public static final int SALT_SIZE = 16;
+    //采用的哈希算法
+    private static final String SHA256 = "SHA-256";
+    //安全随机函数
+    private static SecureRandom random = new SecureRandom();
+    //哈希次数
+    public static final int HASH_INTERATIONS = 1024;
+
+    /**
+     * Hex编码.byte[]转为数据库可以存取的String
+     */
+    public static String encodeHex(byte[] input) {
+        return new String(Hex.encodeHex(input));
+    }
+
+    /**
+     * Hex解码.
+     */
+    public static byte[] decodeHex(String input) {
+        try {
+            return Hex.decodeHex(input.toCharArray());
+        } catch (DecoderException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * 生成随机的Byte[]作为salt.
+     *
+     * @param numBytes byte数组的大小
+     */
+    private static byte[] generateSalt(int numBytes) {
+        byte[] bytes = new byte[numBytes];
+        random.nextBytes(bytes);
+        return bytes;
+    }
+
+    /**
+     *
+     * @param input
+     * @param algorithm hash算法
+     * @param salt
+     * @param iterations 哈希次数
+     * @return
+     */
+    private static byte[] digest(byte[] input, String algorithm, byte[] salt,int iterations) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance(algorithm);
+            if (salt != null) {
+                digest.update(salt);
+            }
+            byte[] result = digest.digest(input);
+            for (int i = 1; i < iterations; i++) {
+                digest.reset();
+                result = digest.digest(result);
+            }
+            return result;
+        } catch (GeneralSecurityException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+
+    /**
+     * 传入明文密码，生成密文密码
+     */
+    public static String entryptPassword(String plainPassword) {
+        String plain =StringEscapeUtils.unescapeHtml(plainPassword);
+        byte[] salt = generateSalt(SALT_SIZE);
+        byte[] hashPassword = digest(plain.getBytes(),SHA256, salt, HASH_INTERATIONS);
+        return encodeHex(salt) + encodeHex(hashPassword);
+    }
+
+    /**
+     * 对比
+     * @param plainPassword(明文密码)
+     * 与
+     * @param encryptedPassword(密文密码)
+     */
+    public static boolean comparePassword(String plainPassword,String encryptedPassword) {
+        byte[] salt = decodeHex(encryptedPassword.substring(0, 32));//一个英文字符俩字节，截取16位盐值
+        String plain = StringEscapeUtils.unescapeHtml(plainPassword);
+        byte[] hashPassword = digest(plain.getBytes(),SHA256, salt, HASH_INTERATIONS);
+        return  encodeHex(hashPassword).equals(encryptedPassword.substring(32));
+    }
+    /**
+     * @param args
+     */
+    /*public static void main(String[] args)throws Exception {
+        String plainPassword = "123456中文qwetyu";
+       // String encryptedPassword = entryptPassword(plainPassword);
+       // System.out.println(encryptedPassword);
+        Long start = System.currentTimeMillis();
+        System.out.println(comparePassword(plainPassword,"2225cee66721d62f958d7ba5538f90406d97d829f4dca0f87ff8aa2ca278f9df7e47f1a6319feba58307734649a89210"));
+        System.out.println("======================"+(System.currentTimeMillis() - start));
+        System.out.println(comparePassword("wrong_password","2225cee66721d62f958d7ba5538f90406d97d829f4dca0f87ff8aa2ca278f9df7e47f1a6319feba58307734649a89210"));
+        //2225cee66721d62f958d7ba5538f90406d97d829f4dca0f87ff8aa2ca278f9df7e47f1a6319feba58307734649a89210
+    }*/
+}
